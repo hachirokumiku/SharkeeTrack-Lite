@@ -50,11 +50,14 @@ const float TIBIA_LENGTH = MY_HEIGHT_CM * TIBIA_TO_HEIGHT_RATIO / 100.0;
 
 // Unique IDs for each body part. You will assign one of these to each tracker.
 #define LIMB_TORSO 0
-#define LIMB_BICEP_R 1
-#define LIMB_FOREARM_R 2
-#define LIMB_HAND_R 3
-#define LIMB_FEMUR_R 4
-#define LIMB_TIBIA_R 5
+#define LIMB_ELBOW_R 1
+#define LIMB_THIGH_R 2
+#define LIMB_ANKLE_R 3
+#define LIMB_FOOT_R 4
+#define LIMB_ELBOW_L 5
+#define LIMB_THIGH_L 6
+#define LIMB_ANKLE_L 7
+#define LIMB_FOOT_L 8
 
 struct KinematicNode {
     uint8_t limbType;
@@ -162,7 +165,7 @@ struct P2PDataPacket {
 Quat myFusedQuat;
 Vector3 myFusedPos;
 EKF myEKF;
-KinematicNode myKinematicData = {LIMB_FOREARM_R, LIMB_BICEP_R, FOREARM_LENGTH};
+KinematicNode myKinematicData;
 
 // ===================================
 // MATH AND CHECKSUM HELPERS
@@ -232,9 +235,17 @@ void setup() {
         EEPROM.commit();
     }
     // Set my kinematic data based on my unique ID
-    if (deviceID == LIMB_TORSO) myKinematicData = {LIMB_TORSO, 0, TORSO_LENGTH};
-    if (deviceID == LIMB_BICEP_R) myKinematicData = {LIMB_BICEP_R, LIMB_TORSO, BICEP_LENGTH};
-    if (deviceID == LIMB_FOREARM_R) myKinematicData = {LIMB_FOREARM_R, LIMB_BICEP_R, FOREARM_LENGTH};
+    switch(deviceID) {
+        case LIMB_TORSO: myKinematicData = {LIMB_TORSO, 0, TORSO_LENGTH}; break;
+        case LIMB_ELBOW_R: myKinematicData = {LIMB_ELBOW_R, LIMB_TORSO, BICEP_LENGTH}; break;
+        case LIMB_THIGH_R: myKinematicData = {LIMB_THIGH_R, LIMB_TORSO, TORSO_LENGTH}; break;
+        case LIMB_ANKLE_R: myKinematicData = {LIMB_ANKLE_R, LIMB_THIGH_R, FEMUR_LENGTH}; break;
+        case LIMB_FOOT_R: myKinematicData = {LIMB_FOOT_R, LIMB_ANKLE_R, TIBIA_LENGTH}; break;
+        case LIMB_ELBOW_L: myKinematicData = {LIMB_ELBOW_L, LIMB_TORSO, BICEP_LENGTH}; break;
+        case LIMB_THIGH_L: myKinematicData = {LIMB_THIGH_L, LIMB_TORSO, TORSO_LENGTH}; break;
+        case LIMB_ANKLE_L: myKinematicData = {LIMB_ANKLE_L, LIMB_THIGH_L, FEMUR_LENGTH}; break;
+        case LIMB_FOOT_L: myKinematicData = {LIMB_FOOT_L, LIMB_ANKLE_L, TIBIA_LENGTH}; break;
+    }
 }
 
 void updateImuAndEKF() {
@@ -279,7 +290,7 @@ float mapRssiToReliability(int rssi) {
     const int maxRssi = -40;
     if (rssi > maxRssi) return 1.0;
     if (rssi < minRssi) return 0.1;
-    return 0.1 + (float)(rssi - minRssi) * (0.9f / (float)(maxRssi - minRsi));
+    return 0.1 + (float)(rssi - minRsi) * (0.9f / (float)(maxRsi - minRsi));
 }
 
 void checkIncomingPackets() {
@@ -315,7 +326,7 @@ void checkIncomingPackets() {
         }
         if (peerIdx != -1) {
             peers[peerIdx].rssi = rssi;
-            peers[peerIdx].reliabilityFactor = mapRssiToReliability(rssi);
+            peers[peerIdx].reliabilityFactor = mapRsiToReliability(rssi);
             peers[peerIdx].quat = incomingPacket->fusedQuat;
             peers[peerIdx].pos = incomingPacket->fusedPos;
             peers[peerIdx].lastRxTime = incomingPacket->timestamp;
