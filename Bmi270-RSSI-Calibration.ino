@@ -1,6 +1,6 @@
 #include <ESP8266WiFi.h> #include <WiFiUdp.h> #include <SparkFun_BMI270_Arduino_Library.h> #include <Wire.h> #include <MadgwickAHRS.h> #include <ArduinoOSC.h> #include <vector>
 
-// ===== CONFIG ===== const char* ssid = "YourSSID"; const char* password = "YourPASSWORD"; const unsigned int udpPort = 4210; const char* oscHostIP = "192.168.1.100"; const unsigned int oscHostPort = 9000; const int TAP_THRESHOLD = 1500; const int SMOOTH_SAMPLES = 20; const float TX_POWER = -40.0; const float PEER_ALPHA = 0.05; const float SELF_CAL_ALPHA = 0.02; const int TOTAL_TRACKERS = 10; const int MIN_CAL_TRACKERS = 3; // chest, hip, router
+// ===== CONFIG ===== const char* ssid = "YourSSID"; const char* password = "YourPASSWORD"; const unsigned int udpPort = 4210; const char* oscHostIP = "192.168.1.100"; const unsigned int oscHostPort = 9000; const int TAP_THRESHOLD = 1500; const int SMOOTH_SAMPLES = 20; const float TX_POWER = -40.0; const float PEER_ALPHA = 0.05; const float SELF_CAL_ALPHA = 0.02; const int TOTAL_TRACKERS = 10; const unsigned long TPoseDelay = 2000; // 2 seconds
 
 // ===== GLOBALS ===== WiFiUDP udp; BMI270 imu; Madgwick filter; OSCClass osc; char incomingPacket[512]; String myID;
 
@@ -10,7 +10,7 @@ Vec3 rawAccel, rawGyro; Vec3 smoothedAccel={0,0,0}; Vec3 smoothedGyro={0,0,0}; Q
 
 Vec3 offset={0,0,0}; Vec3 northVector={0,0,0}; Vec3 peerVector={0,0,0};
 
-bool tPoseCalibrated=false; unsigned long tPoseStart=0; const unsigned long TPoseDelay=2000; int poweredTrackers=0;
+bool tPoseCalibrated=false; unsigned long tPoseStart=0; int poweredTrackers=0;
 
 int tapCount=0; bool tapTriggered=false; unsigned long tapTime=0;
 
@@ -20,13 +20,17 @@ void setup(){ Serial.begin(115200); delay(2000); WiFi.mode(WIFI_STA); WiFi.begin
 
 void loop(){ if(imu.getSensorData()==BMI2_OK){ rawAccel={imu.data.accelX/16384.0f,imu.data.accelY/16384.0f,imu.data.accelZ/16384.0f}; rawGyro={imu.data.gyroX/131.0f,imu.data.gyroY/131.0f,imu.data.gyroZ/131.0f}; accelBuffer[bufIndex]=rawAccel; gyroBuffer[bufIndex]=rawGyro; filter.updateIMU(rawGyro.x,rawGyro.y,rawGyro.z,rawAccel.x,rawAccel.y,rawAccel.z); Quat q={filter.getQuaternionW(),filter.getQuaternionX(),filter.getQuaternionY(),filter.getQuaternionZ()}; quatBuffer[bufIndex]=q; bufIndex=(bufIndex+1)%SMOOTH_SAMPLES; smoothedAccel=smoothBuffer(accelBuffer); smoothedGyro=smoothBuffer(gyroBuffer); smoothedQuat=smoothQuatBuffer(quatBuffer); }
 
-// Wait until minimum trackers for initial calibration int packetSize=udp.parsePacket(); if(packetSize){int len=udp.read(incomingPacket,512); if(len>0) incomingPacket[len]='\0'; poweredTrackers++;} if(poweredTrackers<MIN_CAL_TRACKERS){ delay(10); return; } // wait for chest, hip, router
+// Count powered trackers int packetSize=udp.parsePacket(); if(packetSize){int len=udp.read(incomingPacket,512); if(len>0) incomingPacket[len]='\0'; poweredTrackers++;}
 
-// Initial T-pose calibration once minimum trackers are powered if(!tPoseCalibrated && detectTap(smoothedAccel) && !tapTriggered){tapTriggered=true; tapTime=millis(); tapCount++;} if(tapTriggered && millis()-tapTime>=200){tapTriggered=false; if(tapCount>=3){tPoseStart=millis(); tapCount=0;}} if(!tPoseCalibrated && tPoseStart>0 && millis()-tPoseStart>=TPoseDelay){offset.x=-smoothedAccel.x; offset.y=-smoothedAccel.y; offset.z=-smoothedAccel.z; tPoseCalibrated=true;}
+// Wait for all 10 trackers to be powered if(poweredTrackers<TOTAL_TRACKERS){ delay(10); return; }
 
-// Self-calibration and stacking as more trackers power on Vec3 correctedAccel = smoothedAccel; correctedAccel = vecLerp(correctedAccel, peerVector, SELF_CAL_ALPHA); correctedAccel = vecLerp(correctedAccel, northVector, SELF_CAL_ALPHA); smoothedAccel = correctedAccel;
+// Stack trackers, define north/router reference northVector=smoothedAccel;
 
-// Send position + rotation + north + peer vector over UDP char outBuffer[512]; snprintf(outBuffer,sizeof(outBuffer),"%s,AX%.3f,AY%.3f,AZ%.3f,GX%.3f,GY%.3f,GZ%.3f,CX%.3f,CY%.3f,CZ%.3f,NX%.3f,NY%.3f,NZ%.3f,PX%.3f,PY%.3f,PZ%.3f", myID.c_str(), smoothedAccel.x+offset.x, smoothedAccel.y+offset.y, smoothedAccel.z+offset.z, smoothedGyro.x, smoothedGyro.y, smoothedGyro.z, offset.x, offset.y, offset.z, northVector.x,northVector.y,northVector.z, peerVector.x,peerVector.y,peerVector.z); udp.beginPacket("255.255.255.255",udpPort); udp.write(outBuffer); udp.endPacket();
+// Manual T-pose triggered by triple-tap after all trackers online if(!tPoseCalibrated && detectTap(smoothedAccel) && !tapTriggered){tapTriggered=true; tapTime=millis(); tapCount++;} if(tapTriggered && millis()-tapTime>=200){tapTriggered=false; if(tapCount>=3){tPoseStart=millis(); tapCount=0;}} if(!tPoseCalibrated && tPoseStart>0 && millis()-tPoseStart>=TPoseDelay){ offset.x=-smoothedAccel.x; offset.y=-smoothedAccel.y; offset.z=-smoothedAccel.z; tPoseCalibrated=true; Serial.println("T-pose snapshot taken after all trackers stacked."); }
+
+// Continuous self-calibration Vec3 correctedAccel = smoothedAccel; correctedAccel = vecLerp(correctedAccel, peerVector, SELF_CAL_ALPHA); correctedAccel = vecLerp(correctedAccel, northVector, SELF_CAL_ALPHA); smoothedAccel = correctedAccel;
+
+// Send UDP + OSC char outBuffer[512]; snprintf(outBuffer,sizeof(outBuffer),"%s,AX%.3f,AY%.3f,AZ%.3f,GX%.3f,GY%.3f,GZ%.3f,CX%.3f,CY%.3f,CZ%.3f,NX%.3f,NY%.3f,NZ%.3f,PX%.3f,PY%.3f,PZ%.3f", myID.c_str(), smoothedAccel.x+offset.x, smoothedAccel.y+offset.y, smoothedAccel.z+offset.z, smoothedGyro.x, smoothedGyro.y, smoothedGyro.z, offset.x, offset.y, offset.z, northVector.x,northVector.y,northVector.z, peerVector.x,peerVector.y,peerVector.z); udp.beginPacket("255.255.255.255",udpPort); udp.write(outBuffer); udp.endPacket();
 
 OSCMessage msg("/tracker"); msg.add(myID.c_str()); msg.add(smoothedAccel.x+offset.x); msg.add(smoothedAccel.y+offset.y); msg.add(smoothedAccel.z+offset.z); msg.add(smoothedQuat.w); msg.add(smoothedQuat.x); msg.add(smoothedQuat.y); msg.add(smoothedQuat.z); msg.add(northVector.x); msg.add(northVector.y); msg.add(northVector.z); msg.add(peerVector.x); msg.add(peerVector.y); msg.add(peerVector.z); osc.send(msg, oscHostIP, oscHostPort); msg.empty();
 
