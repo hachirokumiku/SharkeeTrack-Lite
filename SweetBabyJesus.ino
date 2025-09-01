@@ -49,15 +49,16 @@ const float FEMUR_LENGTH = MY_HEIGHT_CM * FEMUR_TO_HEIGHT_RATIO / 100.0;
 const float TIBIA_LENGTH = MY_HEIGHT_CM * TIBIA_TO_HEIGHT_RATIO / 100.0;
 
 // Unique IDs for each body part. You will assign one of these to each tracker.
-#define LIMB_TORSO 0
-#define LIMB_ELBOW_R 1
-#define LIMB_THIGH_R 2
-#define LIMB_ANKLE_R 3
-#define LIMB_FOOT_R 4
-#define LIMB_ELBOW_L 5
-#define LIMB_THIGH_L 6
-#define LIMB_ANKLE_L 7
-#define LIMB_FOOT_L 8
+#define LIMB_CHEST 0
+#define LIMB_HIPS 1
+#define LIMB_ELBOW_R 2
+#define LIMB_THIGH_R 3
+#define LIMB_ANKLE_R 4
+#define LIMB_FOOT_R 5
+#define LIMB_ELBOW_L 6
+#define LIMB_THIGH_L 7
+#define LIMB_ANKLE_L 8
+#define LIMB_FOOT_L 9
 
 struct KinematicNode {
     uint8_t limbType;
@@ -236,15 +237,16 @@ void setup() {
     }
     // Set my kinematic data based on my unique ID
     switch(deviceID) {
-        case LIMB_TORSO: myKinematicData = {LIMB_TORSO, 0, TORSO_LENGTH}; break;
-        case LIMB_ELBOW_R: myKinematicData = {LIMB_ELBOW_R, LIMB_TORSO, BICEP_LENGTH}; break;
-        case LIMB_THIGH_R: myKinematicData = {LIMB_THIGH_R, LIMB_TORSO, TORSO_LENGTH}; break;
-        case LIMB_ANKLE_R: myKinematicData = {LIMB_ANKLE_R, LIMB_THIGH_R, FEMUR_LENGTH}; break;
-        case LIMB_FOOT_R: myKinematicData = {LIMB_FOOT_R, LIMB_ANKLE_R, TIBIA_LENGTH}; break;
-        case LIMB_ELBOW_L: myKinematicData = {LIMB_ELBOW_L, LIMB_TORSO, BICEP_LENGTH}; break;
-        case LIMB_THIGH_L: myKinematicData = {LIMB_THIGH_L, LIMB_TORSO, TORSO_LENGTH}; break;
-        case LIMB_ANKLE_L: myKinematicData = {LIMB_ANKLE_L, LIMB_THIGH_L, FEMUR_LENGTH}; break;
-        case LIMB_FOOT_L: myKinematicData = {LIMB_FOOT_L, LIMB_ANKLE_L, TIBIA_LENGTH}; break;
+        case LIMB_CHEST: myKinematicData = {LIMB_CHEST, 0, 0.0}; break; // Root node, no parent, no length
+        case LIMB_HIPS: myKinematicData = {LIMB_HIPS, LIMB_CHEST, TORSO_LENGTH}; break;
+        case LIMB_ELBOW_R: myKinematicData = {LIMB_ELBOW_R, LIMB_CHEST, BICEP_LENGTH}; break;
+        case LIMB_THIGH_R: myKinematicData = {LIMB_THIGH_R, LIMB_HIPS, FEMUR_LENGTH}; break;
+        case LIMB_ANKLE_R: myKinematicData = {LIMB_ANKLE_R, LIMB_THIGH_R, TIBIA_LENGTH}; break;
+        case LIMB_FOOT_R: myKinematicData = {LIMB_FOOT_R, LIMB_ANKLE_R, FOREARM_LENGTH}; break;
+        case LIMB_ELBOW_L: myKinematicData = {LIMB_ELBOW_L, LIMB_CHEST, BICEP_LENGTH}; break;
+        case LIMB_THIGH_L: myKinematicData = {LIMB_THIGH_L, LIMB_HIPS, FEMUR_LENGTH}; break;
+        case LIMB_ANKLE_L: myKinematicData = {LIMB_ANKLE_L, LIMB_THIGH_L, TIBIA_LENGTH}; break;
+        case LIMB_FOOT_L: myKinematicData = {LIMB_FOOT_L, LIMB_ANKLE_L, FOREARM_LENGTH}; break;
     }
 }
 
@@ -302,7 +304,7 @@ void checkIncomingPackets() {
         
         uint16_t receivedCrc = incomingPacket->crc;
         incomingPacket->crc = 0;
-        if (crc16((const uint8_t*)incomingPacket, sizeof(P2PDataPacket) - sizeof(uint16_t)) != receivedCrc) {
+        if (crc16((const uint8_t*)incomingPacket, sizeof(P2PDataPacket) - sizeof(uint16_t)) != receivedC) {
             return;
         }
 
