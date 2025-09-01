@@ -3,14 +3,14 @@
 #include <Wire.h>
 #include <SparkFun_BMI270_Arduino_Library.h>
 #include <MadgwickAHRS.h>
-#include <ArduinoOSC.h>
+#include <ArduinoOSCWiFi.h>
 #include <vector>
 
 // ===== CONFIG =====
-const char* ssid = "YourSSID";
-const char* password = "YourPassword";
+const char* ssid = "wxyz";
+const char* password = "wxyz";
 const unsigned int udpPort = 4210;
-const char* oscHostIP = "192.168.1.100";
+const char* oscHostIP = "10.0.0.216";
 const unsigned int oscHostPort = 9000;
 const int TOTAL_TRACKERS = 10;
 const int SMOOTH_SAMPLES = 20;
